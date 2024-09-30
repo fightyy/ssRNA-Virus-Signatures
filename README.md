@@ -2,7 +2,7 @@
 
 This is the code for **An expanding universe of mutational signatures and its rapid evolution in single stranded RNA viruses (ssRNA-Virus-Signatures)**.
 
-#### Directory structure
+#### *Directory structure*
 
 The code for ssRNA-Virus-Signatures is organized into different directories and scripts.
 
@@ -13,7 +13,7 @@ The directory structure is as follows:
 - Figure1-5 : This directory contains the analysis scripts for regenerating main figures  .
 - supplementary_figure :  This directory contains the scripts that are related to reproducing the supplementary figures.
 
-#### Description of Scripts and How to Use
+#### *Description of Scripts and How to Use*
 
 ##### Figure1-5 and supplementary_figure
 
