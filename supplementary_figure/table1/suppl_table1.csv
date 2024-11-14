@@ -1,5 +1,0 @@
-iSNV frequency,Muation type,Success,Failure,Success proportion
-low(0.03-0.08),nonsyn,62,72,0.4626865671641791
-high(>=0.08),nonsyn,22,12,0.6470588235294118
-low(0.03-0.08),syn,34,38,0.4722222222222222
-high(>=0.08),syn,16,6,0.7272727272727273

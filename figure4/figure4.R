@@ -173,43 +173,47 @@ p <- ggplot(plot_time, aes(x = average_time, y = distance, color = mutation_type
 ggsave("Figure4D.pdf",unit="cm", width=6, height=6,dpi = 300)
 
 ###Figure4B 
-#Numbers of nonsynonymous and synonymous mutations explained by two mutational signatures in SARS-CoV-2
-df <- read_table("../data/sars_coding_mutation.txt") %>% filter(sub_type != "sub_type")
-sig_df <- read_table("../data/CH192_De-Novo_Signatures_sars.txt")
-#assign each mutation type to a signature
-max_sig_df <- sig_df %>%
-              rowwise() %>%
-              mutate(max_column = names(select(., -MutationsType))[which.max(c_across(-MutationsType))]) %>%
-              select(MutationsType,max_column)
-max_df <- df %>% left_join(max_sig_df,by=c("mutation_type"= "MutationsType") ) 
-group_df <- max_df %>% group_by(max_column,sub_type) %>% summarise(count=n())
-all_group_meta_max_df <- max_df %>% group_by(max_column,sub_type) %>% summarise(count=n()) 
-wider_all_group_meta_max_df <- all_group_meta_max_df %>% 
-                                pivot_wider(
-                                names_from = sub_type,
-                                values_from = count) 
-longer_sars_df <- wider_all_group_meta_max_df %>% pivot_longer(!max_column, names_to = "category", values_to = "count")
+#Numbers of non-synonymous and synonymous mutations explained by two mutational signatures in SARS-CoV-2
+signature_prop_df <- read_tsv("../data/sars_De_Novo_MutationType_Probabilities.txt") 
+meta_df <- read_csv("../data/all_meta_corrected_host.csv")
+mutation_df <- read_table("../data/sars_coding_mutation.txt") %>% filter(sub_type != "sub_type") %>% filter(accession != "internal")
+#annotate mutation by time 
+mutation_df_date <- meta_df %>% select(c("accession","date")) %>% 
+                    right_join(mutation_df,by=c("accession"="accession")) %>% na.omit() %>% 
+                    mutate_at(vars("date"),list(date_obj = ~as.Date(., format = "%Y/%m/%d"))) %>%
+                    mutate(days = as.numeric(date_obj - as.Date("2019-12-01"))) %>%  mutate(months=floor(days/30)) %>% 
+                    group_by(months, mutation_type, sub_type) %>% summarise(count=n())
+#merge mutation and its signature probability
+merged_df <- merge(mutation_df_date, signature_prop_df, by.x = c("months", "mutation_type"), by.y = c("Sample Names", "MutationType"))
+#calculate expected non-synonymous mutation and synonymous mutation for different signature 
+group_merge_df <- merged_df %>% mutate(SBS192A = SBS192A * count, SBS192B = SBS192B * count) %>% group_by(sub_type) %>% na.omit() %>% 
+                  summarise(SBS192A = sum(SBS192A),SBS192B = sum(SBS192B))
+#prepare plot data
+result_df <- group_merge_df  %>% 
+             pivot_longer(cols = -sub_type, names_to = "signature", values_to = "value") %>%
+             pivot_wider(names_from = sub_type, values_from = value) 
+longer_sars_df <- result_df %>% pivot_longer(!signature, names_to = "category", values_to = "count")
 sars_exp_site <- read_tsv("../data/sars_exp_site.txt", col_names = F)[5,2][[1]]
-sars_dnds <- wider_all_group_meta_max_df  %>% mutate(dnds = (`non_syn`/ syn)/sars_exp_site)
-plot <- ggplot(longer_sars_df, aes(x = max_column, y = count, fill = category)) + 
-  geom_col(position = "dodge") +
-  scale_fill_npg(labels=c("Nonsynonymous","Synonymous"))+
-  scale_x_discrete(labels=c("SARS-CoV-2\nsignatureA\n(early)","SARS-CoV-2\nsignatureB\n(late)"))+
-  my_theme()+
-  labs(y = "Count",
-       fill="Mutation type")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "bottom",
-        axis.title.x = element_blank(),
-        legend.title = element_blank(),
-        legend.margin = margin(t = -0.5 , l= -1.2, b= 0.1, unit = "cm")) +
-  guides(fill = guide_legend(nrow = 1))
+sars_dnds <- result_df  %>% mutate(dnds = (`non_syn`/ syn)/sars_exp_site)
+plot <- ggplot(longer_sars_df, aes(x = signature, y = count, fill = category)) + 
+        geom_col(position = "dodge") +
+        scale_fill_npg(labels=c("Nonsynonymous","Synonymous"))+
+        scale_x_discrete(labels=c("SARS-CoV-2\nsignatureA\n(early)","SARS-CoV-2\nsignatureB\n(late)"))+
+        my_theme()+
+        labs(y = "Count",
+             fill="Mutation type")+
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              legend.position = "bottom",
+              axis.title.x = element_blank(),
+              legend.title = element_blank(),
+              legend.margin = margin(t = -0.5 , l= -1.2, b= 0.1, unit = "cm")) +
+        guides(fill = guide_legend(nrow = 1))
 ggsave("Figure4B.pdf",unit="cm", width=4.5, height=6,dpi = 300)
 
 
 ####Figure4C
 #dn/ds for signatures of SARS-CoV-2
-plot <- ggplot(sars_dnds, aes(x = max_column, y = dnds)) + 
+plot <- ggplot(sars_dnds, aes(x = signature, y = dnds)) + 
   geom_col(fill="lightblue", width = 0.7) +
   scale_x_discrete(labels=c("SARS-CoV-2\nsignatureA\n(early)","SARS-CoV-2\nsignatureB\n(late)"))+
   my_theme()+
@@ -222,27 +226,31 @@ ggsave("Figure4C.pdf",unit="cm", width=4, height=6,dpi = 300)
 
 ###Figure4E
 #Numbers of nonsynonymous and synonymous mutations explained by two mutational signatures in H3N2
-df <- read_table("../data/h3n2_coding_mutation.txt")
-sig_df <- read_table("../data/CH192_De-Novo_Signatures_h3n2.txt")
+signature_prop_df <- read_tsv("../data/h3n2_De_Novo_MutationType_Probabilities.txt")
+meta_df <- read_csv("../data/all_meta_corrected_host.csv")
+mutation_df <- read_table("../data/h3n2_coding_mutation.txt") %>% filter(accession != "internal")
 standard_mutation <- c('CUAA', 'CUAC', 'CUAG', 'CUAU', 'CUCA', 'CUCC', 'CUCG', 'CUCU', 'CUGA', 'CUGC', 'CUGG', 'CUGU', 'CUUA', 'CUUC', 'CUUG', 'CUUU', 'GAAA', 'GAAC', 'GAAG', 'GAAU', 'GACA', 'GACC', 'GACG', 'GACU', 'GAGA', 'GAGC', 'GAGG', 'GAGU', 'GAUA', 'GAUC', 'GAUG', 'GAUU', 'AGAA', 'AGAC', 'AGAG', 'AGAU', 'AGCA', 'AGCC', 'AGCG', 'AGCU', 'AGGA', 'AGGC', 'AGGG', 'AGGU', 'AGUA', 'AGUC', 'AGUG', 'AGUU', 'UCAA', 'UCAC', 'UCAG', 'UCAU', 'UCCA', 'UCCC', 'UCCG', 'UCCU', 'UCGA', 'UCGC', 'UCGG', 'UCGU', 'UCUA', 'UCUC', 'UCUG', 'UCUU', 'GUAA', 'GUAC', 'GUAG', 'GUAU', 'GUCA', 'GUCC', 'GUCG', 'GUCU', 'GUGA', 'GUGC', 'GUGG', 'GUGU', 'GUUA', 'GUUC', 'GUUG', 'GUUU', 'CAAA', 'CAAC', 'CAAG', 'CAAU', 'CACA', 'CACC', 'CACG', 'CACU', 'CAGA', 'CAGC', 'CAGG', 'CAGU', 'CAUA', 'CAUC', 'CAUG', 'CAUU', 'GCAA', 'GCAC', 'GCAG', 'GCAU', 'GCCA', 'GCCC', 'GCCG', 'GCCU', 'GCGA', 'GCGC', 'GCGG', 'GCGU', 'GCUA', 'GCUC', 'GCUG', 'GCUU', 'CGAA', 'CGAC', 'CGAG', 'CGAU', 'CGCA', 'CGCC', 'CGCG', 'CGCU', 'CGGA', 'CGGC', 'CGGG', 'CGGU', 'CGUA', 'CGUC', 'CGUG', 'CGUU', 'ACAA', 'ACAC', 'ACAG', 'ACAU', 'ACCA', 'ACCC', 'ACCG', 'ACCU', 'ACGA', 'ACGC', 'ACGG', 'ACGU', 'ACUA', 'ACUC', 'ACUG', 'ACUU', 'UGAA', 'UGAC', 'UGAG', 'UGAU', 'UGCA', 'UGCC', 'UGCG', 'UGCU', 'UGGA', 'UGGC', 'UGGG', 'UGGU', 'UGUA', 'UGUC', 'UGUG', 'UGUU', 'AUAA', 'AUAC', 'AUAG', 'AUAU', 'AUCA', 'AUCC', 'AUCG', 'AUCU', 'AUGA', 'AUGC', 'AUGG', 'AUGU', 'AUUA', 'AUUC', 'AUUG', 'AUUU', 'UAAA', 'UAAC', 'UAAG', 'UAAU', 'UACA', 'UACC', 'UACG', 'UACU', 'UAGA', 'UAGC', 'UAGG', 'UAGU', 'UAUA', 'UAUC', 'UAUG', 'UAUU')
 complement_mutation <- c('GAUU', 'GAGU', 'GACU', 'GAAU', 'GAUG', 'GAGG', 'GACG', 'GAAG', 'GAUC', 'GAGC', 'GACC', 'GAAC', 'GAUA', 'GAGA', 'GACA', 'GAAA', 'CUUU', 'CUGU', 'CUCU', 'CUAU', 'CUUG', 'CUGG', 'CUCG', 'CUAG', 'CUUC', 'CUGC', 'CUCC', 'CUAC', 'CUUA', 'CUGA', 'CUCA', 'CUAA', 'UCUU', 'UCGU', 'UCCU', 'UCAU', 'UCUG', 'UCGG', 'UCCG', 'UCAG', 'UCUC', 'UCGC', 'UCCC', 'UCAC', 'UCUA', 'UCGA', 'UCCA', 'UCAA', 'AGUU', 'AGGU', 'AGCU', 'AGAU', 'AGUG', 'AGGG', 'AGCG', 'AGAG', 'AGUC', 'AGGC', 'AGCC', 'AGAC', 'AGUA', 'AGGA', 'AGCA', 'AGAA', 'CAUU', 'CAGU', 'CACU', 'CAAU', 'CAUG', 'CAGG', 'CACG', 'CAAG', 'CAUC', 'CAGC', 'CACC', 'CAAC', 'CAUA', 'CAGA', 'CACA', 'CAAA', 'GUUU', 'GUGU', 'GUCU', 'GUAU', 'GUUG', 'GUGG', 'GUCG', 'GUAG', 'GUUC', 'GUGC', 'GUCC', 'GUAC', 'GUUA', 'GUGA', 'GUCA', 'GUAA', 'CGUU', 'CGGU', 'CGCU', 'CGAU', 'CGUG', 'CGGG', 'CGCG', 'CGAG', 'CGUC', 'CGGC', 'CGCC', 'CGAC', 'CGUA', 'CGGA', 'CGCA', 'CGAA', 'GCUU', 'GCGU', 'GCCU', 'GCAU', 'GCUG', 'GCGG', 'GCCG', 'GCAG', 'GCUC', 'GCGC', 'GCCC', 'GCAC', 'GCUA', 'GCGA', 'GCCA', 'GCAA', 'UGUU', 'UGGU', 'UGCU', 'UGAU', 'UGUG', 'UGGG', 'UGCG', 'UGAG', 'UGUC', 'UGGC', 'UGCC', 'UGAC', 'UGUA', 'UGGA', 'UGCA', 'UGAA', 'ACUU', 'ACGU', 'ACCU', 'ACAU', 'ACUG', 'ACGG', 'ACCG', 'ACAG', 'ACUC', 'ACGC', 'ACCC', 'ACAC', 'ACUA', 'ACGA', 'ACCA', 'ACAA', 'UAUU', 'UAGU', 'UACU', 'UAAU', 'UAUG', 'UAGG', 'UACG', 'UAAG', 'UAUC', 'UAGC', 'UACC', 'UAAC', 'UAUA', 'UAGA', 'UACA', 'UAAA', 'AUUU', 'AUGU', 'AUCU', 'AUAU', 'AUUG', 'AUGG', 'AUCG', 'AUAG', 'AUUC', 'AUGC', 'AUCC', 'AUAC', 'AUUA', 'AUGA', 'AUCA', 'AUAA')
-#convert mutation type in negative strand to mutation type in positive strand
 mutation_dict <- setNames(complement_mutation, standard_mutation)
-df <- df %>%  rowwise() %>% mutate(mutation_type=mutation_dict[[mutation_type]])
-#assign each mutation type to a signature
-max_sig_df <- sig_df %>%
-              rowwise() %>%
-              mutate(max_column = names(select(., -MutationsType))[which.max(c_across(-MutationsType))]) %>%
-              select(MutationsType,max_column)
-max_df <- df %>% left_join(max_sig_df,by=c("mutation_type"= "MutationsType") ) 
-group_df <- max_df %>% group_by(max_column,sub_type) %>% summarise(count=n())
-wider_all_group_meta_max_df <- group_df %>% pivot_wider(
-                                names_from = sub_type,
-                                values_from = count)
-longer_h3n2_df <- wider_all_group_meta_max_df %>% pivot_longer(!max_column, names_to = "category", values_to = "count")
+mutation_df <- mutation_df %>%  rowwise() %>% mutate(mutation_type=mutation_dict[[mutation_type]])
+#annotate mutation by time
+mutation_df_date <- mutation_df  %>% left_join(meta_df,by=c("accession"="accession")) %>% filter(year>=2000) %>% 
+                    group_by(mutation_type, year, sub_type) %>% summarise(count=n()) 
+#merge mutation and its signature probability
+merged_df <- merge(mutation_df_date, signature_prop_df, by.x = c("year", "mutation_type"), by.y = c("Sample Names", "MutationType"))
+#calculate expected non-synonymous mutation and synonymous mutation for different signature 
+group_merge_df <- merged_df %>% mutate(SBS192A = SBS192A * count, SBS192B = SBS192B * count, SBS192C = SBS192C * count) %>% group_by(sub_type) %>%
+  summarise(SBS192A = sum(SBS192A),
+            SBS192B = sum(SBS192B),
+            SBS192C = sum(SBS192C))
+#prepare plot data
+result_df <- group_merge_df  %>% 
+  pivot_longer(cols = -sub_type, names_to = "signature", values_to = "value") %>%
+  pivot_wider(names_from = sub_type, values_from = value) 
+longer_h3n2_df <- result_df %>% pivot_longer(!signature, names_to = "category", values_to = "count")
 h3n2_exp_site <- read_tsv("../data/h3n2_exp_site.txt", col_names = F)[5,2][[1]]
-h3n2_dnds <- wider_all_group_meta_max_df %>% mutate(dnds = (`non_syn`/ syn)/h3n2_exp_site)
-plot <- ggplot(longer_h3n2_df, aes(x = max_column, y = count, fill = category)) + 
+h3n2_dnds <- result_df  %>% mutate(dnds = (`non_syn`/ syn)/h3n2_exp_site)
+plot <- ggplot(longer_h3n2_df, aes(x = signature, y = count, fill = category)) + 
       geom_col(position = "dodge") +
       scale_fill_npg(labels=c("Nonsynonymous","Synonymous"))+
       scale_x_discrete(labels=c("H3N2   \nsignatureA","H3N2   \nsignatureB\n(late)","H3N2   \nsignatureC\n(early)"))+
@@ -254,12 +262,12 @@ plot <- ggplot(longer_h3n2_df, aes(x = max_column, y = count, fill = category)) 
             axis.title.x = element_blank(),
             legend.title = element_blank(),
             legend.margin = margin(t = -0.5 , l= -1.2, b= 0.1, unit = "cm")) +  
-      guides(fill = guide_legend(nrow = 1)) 
+      guides(fill = guide_legend(nrow = 1)) a
 ggsave("Figure4E.pdf",unit="cm", width=5, height=6,dpi = 300)
 
 ###Figure4F
 #dn/ds for signatures in H3N2
-plot <- ggplot(h3n2_dnds, aes(x = max_column, y = dnds)) + 
+plot <- ggplot(h3n2_dnds, aes(x = signature, y = dnds)) + 
         geom_col(fill="lightblue",width = 0.7) +
         scale_fill_npg(labels=c("Nonsynonymous","Synonymous"))+
         scale_x_discrete(labels=c("H3N2   \nsignatureA","H3N2   \nsignatureB\n(late)","H3N2   \nsignatureC\n(early)"))+
@@ -269,11 +277,12 @@ plot <- ggplot(h3n2_dnds, aes(x = max_column, y = dnds)) +
               axis.title.x = element_blank())+
         geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
         annotate("text", x = 2, y = 0.95, label = "Neutral", size = 7/.pt)
+
 ggsave("Figure4F.pdf",unit="cm", width=5, height=6 ,dpi = 300)
 
 
 ###Figure4G
-#Cosine similarity between the mutation spectra of iSNVs at different frequencies and the mutation spectrum derived from polymorphism data for SARS-CoV-2
+#iSNV frequency in donor and recipient
 low_frequency_isnv <- c("sars_isnv_0.2_0-count", "sars_isnv_0.4_0.2-count")
 high_frequency_isnv <- c("sars_isnv_0.6_0.4-count", "sars_isnv_0.8_0.6-count", "sars_isnv_0.95_0.8-count")
 data_df <- read_csv("../data/all_pairwise_result1.csv") %>% rowwise() %>% 
@@ -344,9 +353,45 @@ p1 <- ggplot(all_snp_df, aes(x = group1, y = cosine_similarity, fill=group1)) +
       labs(fill="iSNV frequency")
 ggsave("Figure4G.pdf",width = 18, height = 6, units = "cm",dpi = 300)
 
-###Figure4H-K
+###Figure4H
+isnv_pair <- read_csv("../data/isnv_pair_ruan_andreas.csv") %>% filter(!is.na(recipient))
+cutoff = 0.08
+high_nonsyn <- isnv_pair %>% filter(donor_alt_frequency >= cutoff) %>%
+              mutate(transmit=ifelse(recipient_alt_frequency >=0.03, "success", "failure")) %>%
+              filter(func == "A")  
+high_syn <- isnv_pair %>% filter(donor_alt_frequency >= cutoff) %>%
+              mutate(transmit=ifelse(recipient_alt_frequency >=0.03, "success", "failure")) %>%
+              filter(func == "S") 
+low_nonsyn <- isnv_pair %>% filter(donor_alt_frequency < cutoff  & donor_alt_frequency >= 0.03 ) %>% 
+              mutate(transmit=ifelse(recipient_alt_frequency >=0.03, "success", "failure")) %>% 
+              filter(func == "A") 
+low_syn <- isnv_pair %>% filter(donor_alt_frequency < cutoff  & donor_alt_frequency >= 0.03 ) %>% 
+            mutate(transmit=ifelse(recipient_alt_frequency >=0.03, "success", "failure"))  %>%
+            filter(func == "S") 
+all_observed_table <- rbind(high_nonsyn, high_syn, low_nonsyn, low_syn)
+isnv_color <- pal_npg()(2)
+p <- ggplot(all_observed_table, aes(x = donor_alt_frequency, y = recipient_alt_frequency, 
+                               color = func, shape = transmit)) +
+      scale_color_manual(values= isnv_color,labels=c("Nonsynonymous", "Synonymous"))+
+      geom_point(size = 0.5, width = 0.1) +  
+      geom_point(aes(x=0.00507300,y=0),size = 0, alpha = 0) +
+      geom_vline(xintercept = 0.08, linetype = "dashed", color = "black", size=0.1)+
+      geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black",size=0.1) + 
+      scale_x_log10(breaks=c(0,0.01, 0.08,1),n.breaks=3) +
+      scale_y_log10(breaks=c(0,0.01, 0.08,1),n.breaks=3) +
+      coord_fixed(ratio = 1) +  
+      labs(x = "Donor iSNV frequency", y = "Recipient iSNV frequency", 
+           color = "Mutation Type", shape = "Transmission") +  
+      my_theme()+
+      theme(legend.position="None",
+            axis.title.x = element_text(margin = margin(t = 0.3)),  
+            axis.title.y = element_text(margin = margin(r = 2)))
+ggsave("Figure4H.pdf",width = 6, height = 5.5, units = "cm",dpi = 300)
+
+
+###Figure4I-K
 #prepare data
-isnv_pair <- read_csv("../data/isnv_pair_ruan_andreas.csv")
+isnv_pair <- read_csv("../data/isnv_pair_ruan_andreas.csv") %>% filter(!is.na(recipient))
 cutoff = 0.08
 high_nonsyn <- isnv_pair %>% filter(donor_alt_frequency >= cutoff, recipient_alt_frequency >=0.03) %>%
               filter(func == "A") %>% 
@@ -379,87 +424,93 @@ df_long <- data.frame(
             mutatio_type = c(df$mutation_type, df$mutation_type),
             group = rep(1:nrow(df), times = 2))
 
-###Figure4H
-#Frequency changes of high-frequency (>=0.08 in donors) non-synonymous iSNVs for SARS-CoV-2 before and after transmission
-df <- high_nonsyn %>% filter(donor_alt_frequency < 0.9)
+###Figure4I
+#Frequency changes of synonymous iSNVs for SARS-CoV-2 before and after transmission
+df <- rbind(high_syn, low_syn)
 df_long <- data.frame(
-          category = rep(c("donor", "recipient"), each = nrow(df)),
-          frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
-          group = rep(1:nrow(df), times = 2))
-wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "greater")
-p <- ggplot(df_long, aes(x = category, y = frequency, group = group)) +
-    geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA)+
+            category = rep(c("donor", "recipient"), each = nrow(df)),
+            frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
+            group = rep(1:nrow(df), times = 2))
+wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "two.sided")
+ggplot(df_long, aes(x = category, y = frequency, group = group)) +
+    geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA, fatten = 0)+
+    stat_summary(fun = mean, geom = "crossbar", width = 0.75, color = "black", size = 0.5, aes(group = category))+
     scale_color_npg()+
-    geom_point( aes(group = category, color=category), size = 0.2) +
+    scale_x_discrete(labels = c("Donor", "Recipient")) +
+    geom_point( aes(group = category, color=category), size = 0.1) +
     geom_line(aes(group = group), linewidth=0.05) +
     annotate("text",
-             x = 0.5, y = max(df_long$frequency) + 0.01, 
+             x = 1, y = max(df_long$frequency) + 0.15, 
              label = paste0("p-value : ", format(wilcox_test_result$p.value, digits = 3)), 
              hjust = 0, vjust = 1, size = 7 /.pt)+
     labs(
       y = "iSNV frequency",
-      title = "High-frequency\nnonsynonymous"
-    ) +
+      title = "Synonymous") +
     my_theme()+
     theme(  
       axis.title.x = element_blank(),
-      plot.title = element_text(size=7, margin=margin(t= 0.1, l =-1, unit="cm")),
+      plot.title = element_text(margin=margin(t= 0.1, unit="cm")),
       axis.text.x = element_text(margin=margin(b= 0.1, unit="cm")),
-      legend.position = "none"
-    )
-ggsave("Figure4H.pdf",width = 4.5, height = 5, units = "cm",dpi = 300)
-
-###Figure4I
-#Frequency changes of low-frequency (0.03-0.08 in donors) non-synonymous iSNVs for SARS-CoV-2 before and after transmission
-df <- low_nonsyn
-df_long <- data.frame(
-          category = rep(c("donor", "recipient"), each = nrow(df)),
-          frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
-          group = rep(1:nrow(df), times = 2))
-wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "greater")
-p <- ggplot(df_long, aes(x = category, y = frequency, group = group)) +
-            geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA)+
-            scale_color_npg()+
-            geom_point( aes(group = category, color=category), size = 0.2) +
-            geom_line(aes(group = group), linewidth=0.05) +
-            annotate("text",
-                     x = 0.5, y = max(df_long$frequency) + 0.01, 
-                     label = paste0("p-value : ", format(wilcox_test_result$p.value, digits = 3)), 
-                     hjust = 0, vjust = 1, size = 7 /.pt)+
-            labs(
-              y = "iSNV frequency",
-              title = "Low-frequency\nnonsynonymous"
-            ) +
-            my_theme()+
-            theme(  
-              axis.title.x = element_blank(),
-              plot.title = element_text(margin=margin(t= 0.1, unit="cm")),
-              axis.text.x = element_text(margin=margin(b= 0.1, unit="cm")),
-              legend.position = "none")
-
-ggsave("Figure4I.pdf",width = 4.5, height = 5, units = "cm",dpi = 300)
+      legend.position = "none")
+ggsave("Figure4I.pdf",width = 4.5, height = 6, units = "cm",dpi = 300)
 
 
 ###Figure4J
-#Frequency changes of High-frequency (>=0.08 in donors) synonymous iSNVs for SARS-CoV-2 before and after transmission
-df <- high_syn
+#Frequency changes of low-frequency (0.03-0.08 in donors) synonymous iSNVs for SARS-CoV-2 before and after transmission
+df <- low_nonsyn
 df_long <- data.frame(
-          category = rep(c("donor", "recipient"), each = nrow(df)),
-          frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
-          group = rep(1:nrow(df), times = 2))
-wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "greater")
-p <- ggplot(df_long, aes(x = category, y = frequency, group = group)) +
-      geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA)+
+            category = rep(c("donor", "recipient"), each = nrow(df)),
+            frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
+            group = rep(1:nrow(df), times = 2))
+wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "two.sided")
+ggplot(df_long, aes(x = category, y = frequency, group = group)) +
+        # geom_violin(aes(group = category, fill=category), linewidth = 0.1) +
+        geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA, fatten = 0)+
+        stat_summary(fun = mean, geom = "crossbar", width = 0.75, color = "black", size = 0.5, aes(group = category))+
+        scale_color_npg()+
+        scale_x_discrete(labels = c("Donor", "Recipient")) +
+        geom_point( aes(group = category, color=category), size = 0.2) +
+        geom_line(aes(group = group), linewidth=0.05) +
+        annotate("text",
+                 x = 1, y = max(df_long$frequency) + 0.03, 
+                 label = paste0("p-value : ", format(wilcox_test_result$p.value, digits = 3)), 
+                 hjust = 0, vjust = 1, size = 7 /.pt)+
+        labs(
+          y = "iSNV frequency",
+          title = "Low-frequency\nnonsynonymous"
+        ) +
+        my_theme()+
+        theme(  
+          axis.title.x = element_blank(),
+          plot.title = element_text(margin=margin(t= 0.1, unit="cm")),
+          axis.text.x = element_text(margin=margin(b= 0.1, unit="cm")),
+          legend.position = "none")
+ggsave("Figure4J.pdf",width = 4.5, height = 5, units = "cm",dpi = 300)
+
+
+
+###Figure4K
+#Frequency changes of High-frequency (>=0.08 in donors) nonsynonymous iSNVs for SARS-CoV-2 before and after transmission
+df <- high_nonsyn %>% filter(donor_alt_frequency < 0.9)
+df_long <- data.frame(
+            category = rep(c("donor", "recipient"), each = nrow(df)),
+            frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
+            group = rep(1:nrow(df), times = 2))
+wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "two.sided")
+ggplot(df_long, aes(x = category, y = frequency, group = group)) +
+      geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA,fatten = 0)+
+      stat_summary(fun = mean, geom = "crossbar", width = 0.75, color = "black", size = 0.5, aes(group = category))+
       scale_color_npg()+
+      scale_x_discrete(labels = c("Donor", "Recipient")) +
       geom_point( aes(group = category, color=category), size = 0.2) +
       geom_line(aes(group = group), linewidth=0.05) +
       annotate("text",
-               x = 0.5, y = max(df_long$frequency) + 0.08, 
+               x = 1, y = max(df_long$frequency) + 0.03, 
                label = paste0("p-value : ", format(wilcox_test_result$p.value, digits = 3)), 
                hjust = 0, vjust = 1, size = 7 /.pt)+
       labs(
         y = "iSNV frequency",
-        title = "High-frequency\nsynonymous"
+        title = "High-frequency\nnonsynonymous"
       ) +
       my_theme()+
       theme(  
@@ -467,38 +518,6 @@ p <- ggplot(df_long, aes(x = category, y = frequency, group = group)) +
         plot.title = element_text(margin=margin(t= 0.1, unit="cm")),
         axis.text.x = element_text(margin=margin(b= 0.1, unit="cm")),
         legend.position = "none")
-ggsave("Figure4J.pdf",width = 4.5, height = 5, units = "cm",dpi = 300)
-
-
-
-###Figure4K
-#Frequency changes of low-frequency (0.03-0.08 in donors) synonymous iSNVs for SARS-CoV-2 before and after transmission
-df <- low_syn
-df_long <- data.frame(
-  category = rep(c("donor", "recipient"), each = nrow(df)),
-  frequency = c(df$donor_alt_frequency, df$recipient_alt_frequency),
-  group = rep(1:nrow(df), times = 2)
-)
-wilcox_test_result  <- wilcox.test(df$donor_alt_frequency, df$recipient_alt_frequency, paired = TRUE, alternative = "greater")
-p <- ggplot(df_long, aes(x = category, y = frequency, group = group)) +
-    geom_boxplot(aes(group = category, color=category), linewidth = 0.1, outlier.shape = NA)+
-    scale_color_npg()+
-    geom_point( aes(group = category, color=category), size = 0.2) +
-    geom_line(aes(group = group), linewidth=0.05) +
-    annotate("text",
-             x = 0.5, y = max(df_long$frequency) + 0.01, 
-             label = paste0("p-value : ", format(wilcox_test_result$p.value, digits = 3)), 
-             hjust = 0, vjust = 1, size = 7 /.pt)+
-    labs(
-      y = "iSNV frequency",
-      title = "Low-frequency\nsynonymous"
-    ) +
-    my_theme()+
-    theme(  
-      axis.title.x = element_blank(),
-      plot.title = element_text(margin=margin(t= 0.1, unit="cm")),
-      axis.text.x = element_text(margin=margin(b= 0.1, unit="cm")),
-      legend.position = "none")
 ggsave("Figure4K.pdf",width = 4.5, height = 5, units = "cm",dpi = 300)
 
 

@@ -72,9 +72,9 @@ Two de novo signatures extracted from SARS-CoV-2 using SigProfilerExtractor.
 
  
 
-### CH192_De-Novo_Activities_refit_sars.txt
+### sars_De_Novo_MutationType_Probabilities.txt
 
-The number of mutations in each SARS-CoV-2 mutation spectrum explained by the 2 de novo signatures.
+The probability of an individual mutation being attributed to a mutation signature based on its specific mutational context. In this file，Sample column represents collection year for that spectrum.
 
  
 
@@ -108,9 +108,9 @@ Three de novo signatures extracted from H3N2 using SigProfilerExtractor.
 
  
 
-### CH192_De-Novo_Activities_refit_h3n2.txt
+### h3n2_De_Novo_MutationType_Probabilities.txt
 
-The number of mutations in each H3N2 virus mutation spectrum explained by the 3 de novo signatures.
+The probability of an individual mutation being attributed to a mutation signature based on its specific mutational context. In this file，Sample column represents collection year for that spectrum.
 
  
 

@@ -159,8 +159,7 @@ p1 <- ggplot(df_100 , aes(x = factor(order), y = cosine_similarity)) +
         size=2,
         fill = "#F39B7FFF")+
       scale_x_discrete(labels=c( "H3N2", "H5N1 ",
-                                 "Rabies lyssavirus", "SARS-CoV-2", "West Nile virus",
-                                 "Zika virus"))+
+                                 "Rabies lyssavirus", "SARS-CoV-2", "West Nile virus","Zika virus"))+
       labs(
         x = "Viral species",
         y = "Pairwise cosine similarity between \n viral hosts' mutation spectrums")+
@@ -216,7 +215,6 @@ p2 <- ggplot(host_df_100, aes(x = factor(host), y = cosine_similarity)) +
       theme(
         axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "none")
-p2
 ggsave("Figure1C.pdf",width = 5.5, height = 6, units = "cm",dpi = 300)
 
 

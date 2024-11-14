@@ -1,83 +1,127 @@
 library(tidyverse)
 library(this.path)
-library(rstatix)
-library(ggpubr)
-library(cowplot)
-library(ggpmisc)
+library(ggsci)
 setwd(this.dir())
 source("../../bin/theme_setup.R")
-###supplementary figure7A
-###The probability of the mutations in the spike protein predicted to be bounded by MHC molecules for the SARS-COV2
-mhc_count <- read_table("../data/mhc_table_sars.txt",col_names=c("strong","weak","all","accession_pos","protein")) %>% 
-             mutate("weak_strong"=weak+strong) %>% rowwise() %>% 
-             mutate(accession = str_split(accession_pos, "-")[[1]][1],
-                    pos = str_split(accession_pos, "-")[[1]][2])
 
-mhc_proportion <- mhc_count %>% group_by(accession,pos,protein) %>% 
-                  summarise_at(vars(weak, strong, weak_strong, all), funs(sum)) %>% 
-                  mutate_at(vars(weak, strong, weak_strong), funs(./all))
-meta_df <- read_csv("../../data/all_meta_corrected_host.csv") %>% select("accession","year","date")
-data_df <- mhc_proportion %>% left_join(meta_df) %>% na.omit
-mhc_data_df_date <- data_df %>%
-                    mutate_at(vars("date"),list(date_obj = ~as.Date(., format = "%Y/%m/%d"))) %>%
-                    mutate(days = as.numeric(date_obj - as.Date("2019-12-01"))) %>%  mutate(months=4*floor(days/120))
-result1 <- lm(data=mhc_data_df_date, strong ~ months)
-summary(result1)
-result2 <- lm(data=mhc_data_df_date, weak_strong ~ months)
-summary(result2)
-p <- ggplot(mhc_data_df_date, aes(x=months, y=weak_strong)) +
-      geom_violin(aes(fill= months,group=factor(months)),color=NA) +
-      scale_fill_gradient(low = "#4DBBD5FF", high = "#E64B35FF")+
-      stat_summary(fun.data=mean_sdl, fun.args = list(mult = 1),
-                   geom="pointrange", color="black",
-                   shape = 18, size = 0.75)+
-      geom_smooth(method="lm", se=FALSE,color="red",linewidth=0.6)+
-      stat_poly_eq(aes(label = paste(..eq.label..)),
-                   label.x = 0.01 , label.y = 0.9, size = 7 / .pt,
-                   formula = y ~ x, parse = TRUE) +
-      stat_cor(aes(label = paste(..p.label..)), 
-               label.x = -2, label.y = 0.07, size = 7 /.pt) +
-      coord_cartesian(ylim = c(0, 0.07))+
-      labs(title="SARS-CoV-2",
-           fill="Month since\n2019/12",
-           x = "Month (since 2019)",
-           y = "Proportion of peptides\nbound by MHC class I")+
-      my_theme()+
-      theme(plot.title =element_text(margin=margin(t= 0.1 ,unit="cm")))
-ggsave("suppl_figure7A.pdf",width = 18, height = 6, units = "cm",dpi = 300)
+###supplementary figure3A
+###nonsynonymous mutational spectra for different iSNVs and SNPs of the SARS-CoV-2
+SBS192.input.catalog <- read_csv("../data/sars_nosnyn_spectrum.csv") 
+matrix <- SBS192.input.catalog %>% select(-1)
+normalized_matrix <- apply(matrix,1, function(x) x/colSums(matrix)) %>% t() %>% as.data.frame()
+normalized_matrix$Mutationtype <-  SBS192.input.catalog$Mutationtype
+SBS192.input.catalog <- normalized_matrix
+SBS192.input.catalog$muttype <- apply(SBS192.input.catalog,1,function(x){
+  return(paste0(substring(x["Mutationtype"],1,1),
+                ">",
+                substring(x["Mutationtype"],2,2)))
+})
+SBS192.input.catalog$trinuc <- apply(SBS192.input.catalog,1,function(x){
+  return(paste0(substring(x["Mutationtype"],3,3),
+                substring(x["Mutationtype"],1,1),
+                substring(x["Mutationtype"],4,4)))
+})
 
-###supplementary figure7B
-###The probability of the mutations in the HA protein predicted to be bounded by MHC molecules for the H3N2 influenza virus
-mhc_count <- read_table("../data/mhc_table_h3n2.txt",col_names=c("strong","weak","all","accession_pos"))%>% 
-             mutate("weak_strong"=weak+strong) %>% rowwise() %>% 
-             mutate(accession = str_split(accession_pos, "-")[[1]][1],
-                       pos = str_split(accession_pos, "-")[[1]][2])
-mhc_proportion <- mhc_count %>% group_by(accession,pos) %>% 
-                  summarise_at(vars(weak, strong, weak_strong, all), funs(sum)) %>% 
-                  mutate_at(vars(weak, strong, weak_strong), funs(./all))
-meta_df <- read_csv("../../data/all_meta_corrected_host.csv") %>% select("accession","year")
-data_df <- mhc_proportion %>% left_join(meta_df) %>% na.omit %>% filter(year >=2000) 
-data_df$year <- as.numeric(data_df$year)
-result1 <- lm(data=data_df, strong ~ year)
-summary(result1)
-result2 <- lm(data=data_df, weak_strong ~ year)
-summary(result2)
-p <- ggplot(data_df, aes(x=year, y=weak_strong)) +
-    geom_violin(aes(fill= year,group=factor(year)), color=NA) +
-    scale_fill_gradient(low = "#4DBBD5FF", high = "#E64B35FF") +
-    stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1),
-                 geom = "pointrange", color = "black",
-                 shape = 18, size = 0.75) +
-    geom_smooth(method="lm", se=FALSE,color="red",linewidth=0.6)+
-    stat_poly_eq(aes(label = paste(..eq.label..)),
-                 label.x = 0.05 , label.y = 0.9, size = 7 / .pt,
-                 formula = y ~ x, parse = TRUE) +
-    stat_cor(aes(label = paste(..p.label..)),
-             label.x = 2000, label.y =0.08, size = 7 /.pt) +
-    labs(title = "H3N2",
-         fill = "Year",
-         x = "Year",
-         y = "Proportion of peptides\nbound by MHC class I") +
-    my_theme()+
-    theme(plot.title =element_text(margin=margin(t= 0.5 ,unit="cm")))
-ggsave("suppl_figure7B.pdf",width = 18, height = 6, units = "cm",dpi = 300)
+long_rename_SBS192.input.catalog <- SBS192.input.catalog %>% 
+                                    pivot_longer( cols = contains("count"),
+                                                  names_to = "signature",
+                                                  values_to = "exposure")
+
+long_rename_SBS192.input.catalog$muttype <- factor(long_rename_SBS192.input.catalog$muttype,
+                                                   levels=c("C>U","G>A","A>G","U>C",
+                                                            "G>U","C>A","G>C","C>G",
+                                                            "A>C","U>G","A>U","U>A"))
+original_signature <- c("sars_isnv_0.2_0-count","sars_isnv_0.4_0.2-count","sars_isnv_0.6_0.4-count",
+                        "sars_isnv_0.8_0.6-count","sars_isnv_0.95_0.8-count","sars_polymorphism_count",
+                        "sars_polymorphism_non_syn-count","sars_polymorphism_syn-count") 
+correct_signature <- c("iSNV\n(0.05-0.2)","iSNV\n(0.2-0.4)","iSNV\n(0.4-0.6)",
+                       "iSNV\n(0.6-0.8)","iSNV\n(0.8-0.95)","polymorphism","polymorphism","polymorphism")
+signature_dict <- setNames(correct_signature,original_signature)
+long_rename_SBS192.input.catalog <- long_rename_SBS192.input.catalog %>% rowwise() %>%
+                                    mutate(signature=signature_dict[[signature]])
+mypal <- pal_npg("nrc")(10)
+mypal <- c(mypal, c("#4DAF4A" , "#999999" , "#A65628"))
+plot <- ggplot(data =long_rename_SBS192.input.catalog , aes(x = trinuc, y = exposure, fill = muttype)) +
+  geom_bar(stat = "identity") + 
+  facet_grid(signature ~ muttype, scales = "free_x", space = "free_x") +
+  theme_bw() +
+  ylab("Proportion of mutation") +
+  labs(title="Mutation spectra of nonsynonymous mutation")+
+  scale_fill_manual(values = mypal) +
+  scale_y_continuous(expand = c(0, 0, 0.05, 0)) +
+  my_theme()+
+  theme(  
+    panel.spacing.x = unit(0, "lines"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y =element_text(size = 7),
+    axis.title.y = element_text(size = 9),
+    strip.text = element_text(size = 5),
+    legend.position = "none",
+    plot.margin = margin(0, 0, 0, 0, "null"))
+ggsave("suppl_figure3A.pdf",width =20, height = 9, units = "cm",dpi = 300)
+
+
+###supplementary figure3B
+###synonymous mutational spectra for different iSNVs and SNPs of the SARS-CoV-2
+SBS192.input.catalog <- read_csv("../data/sars_syn_spectrum.csv") 
+matrix <- SBS192.input.catalog %>% select(-1)
+normalized_matrix <- apply(matrix,1, function(x) x/colSums(matrix)) %>% t() %>% as.data.frame()
+normalized_matrix$Mutationtype <-  SBS192.input.catalog$Mutationtype
+SBS192.input.catalog <- normalized_matrix
+SBS192.input.catalog$muttype <- apply(SBS192.input.catalog,1,function(x){
+  return(paste0(substring(x["Mutationtype"],1,1),
+                ">",
+                substring(x["Mutationtype"],2,2)))
+})
+SBS192.input.catalog$trinuc <- apply(SBS192.input.catalog,1,function(x){
+  return(paste0(substring(x["Mutationtype"],3,3),
+                substring(x["Mutationtype"],1,1),
+                substring(x["Mutationtype"],4,4)))
+})
+
+long_rename_SBS192.input.catalog <- SBS192.input.catalog %>% 
+                                    pivot_longer( cols = contains("count"),
+                                                  names_to = "signature",
+                                                  values_to = "exposure")
+
+long_rename_SBS192.input.catalog$muttype <- factor(long_rename_SBS192.input.catalog$muttype,
+                                                   levels=c("C>U","G>A","A>G","U>C",
+                                                            "G>U","C>A","G>C","C>G",
+                                                            "A>C","U>G","A>U","U>A"))
+original_signature <- c("sars_isnv_0.2_0-count","sars_isnv_0.4_0.2-count","sars_isnv_0.6_0.4-count",
+                        "sars_isnv_0.8_0.6-count","sars_isnv_0.95_0.8-count","sars_polymorphism_count",
+                        "sars_polymorphism_non_syn-count","sars_polymorphism_syn-count") 
+correct_signature <- c("iSNV\n(0.05-0.2)","iSNV\n(0.2-0.4)","iSNV\n(0.4-0.6)",
+                       "iSNV\n(0.6-0.8)","iSNV\n(0.8-0.95)","polymorphism","polymorphism","polymorphism")
+signature_dict <- setNames(correct_signature,original_signature)
+long_rename_SBS192.input.catalog <- long_rename_SBS192.input.catalog %>% rowwise() %>%
+                                    mutate(signature=signature_dict[[signature]])
+mypal <- pal_npg("nrc")(10)
+mypal <- c(mypal, c("#4DAF4A" , "#999999" , "#A65628"))
+plot <- ggplot(data =long_rename_SBS192.input.catalog , aes(x = trinuc, y = exposure, fill = muttype)) +
+        geom_bar(stat = "identity") + 
+        facet_grid(signature ~ muttype, scales = "free_x", space = "free_x") +
+        theme_bw() +
+        ylab("Proportion of mutation") +
+        labs(title="Mutation spectra of synonymous mutation")+
+        scale_fill_manual(values = mypal) +
+        scale_y_continuous(expand = c(0, 0, 0.05, 0)) +
+        my_theme()+
+        theme(  
+          panel.spacing.x = unit(0, "lines"),
+          panel.grid.minor = element_blank(),
+          panel.grid.major = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.x = element_blank(),
+          axis.text.y =element_text(size = 7),
+          axis.title.y = element_text(size = 9),
+          strip.text = element_text(size = 5),
+          legend.position = "none",
+          plot.margin = margin(0, 0, 0, 0, "null"))
+ggsave("suppl_figure3B.pdf",width =20, height = 9, units = "cm",dpi = 300)
+
