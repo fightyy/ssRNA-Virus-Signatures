@@ -38,3 +38,15 @@ Mutational signatures extracted from 13 viral families separately.
 
 The non-synonymous iSNV mutational spectrum for SARS-CoV-2.
 
+
+
+### sars_spectrum_distance.csv
+
+Nonsynonymous spectrum distance and synonymous spectrum distance for SARS-CoV-2.
+
+
+
+### h3n2_spectrum_distance.csv
+
+Nonsynonymous spectrum distance and synonymous spectrum distance for H3N2.
+

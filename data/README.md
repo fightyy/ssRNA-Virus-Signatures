@@ -92,13 +92,21 @@ sub_type: Mutation type (synonymous or non-synonymous)
 
 mutation_type: nucleotide mutation type
 
-Sub: amino acid substitution type
+sub: amino acid substitution type
 
- 
 
-### sars_exp_site.txt
 
-The expected number of synonymous and non-synonymous mutation sites in SARS-CoV-2.
+### sars_dnds.csv
+
+The dn/ds ratio for every time window  in SARS-CoV-2.
+
+
+
+### sars_signature_prop.csv
+
+The signature proportions for every time window in SARS-CoV-2. 
+
+
 
  
 
@@ -120,9 +128,15 @@ The mutation file for the H3N2 coding region.
 
  
 
-### h3n2_exp_site.txt
+### h3n2_dnds.csv
 
-The expected number of synonymous and non-synonymous mutation sites in H3N2.
+The dn/ds ratio for every time window  in H3N2.
+
+
+
+### h3n2_signature_prop.csv
+
+The signature proportions for every time window in H3N2. 
 
  
 
